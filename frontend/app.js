@@ -2,28 +2,49 @@ const API_BASE = window.TRANSLATOR_API_BASE || "";
 const TRANSLATE_ENDPOINT = `${API_BASE}/api/translate`;
 const HISTORY_KEY = "translator_history_v1";
 const HISTORY_LIMIT = 10;
+const INPUT_HISTORY_LIMIT = 50;
+const REQUEST_TIMEOUT_MS = 10000;
+const RETRY_DELAY_MS = 600;
 
 const sourceText = document.getElementById("sourceText");
 const translatedText = document.getElementById("translatedText");
 const translateBtn = document.getElementById("translateBtn");
 const clearBtn = document.getElementById("clearBtn");
 const copyBtn = document.getElementById("copyBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const copyLinkBtn = document.getElementById("copyLinkBtn");
+const qrBtn = document.getElementById("qrBtn");
+const undoBtn = document.getElementById("undoBtn");
+const redoBtn = document.getElementById("redoBtn");
+const clearOutputBtn = document.getElementById("clearOutputBtn");
 const swapBtn = document.getElementById("swapBtn");
 const statusText = document.getElementById("statusText");
+const detectedLang = document.getElementById("detectedLang");
 const charCount = document.getElementById("charCount");
-const sourceLangLabel = document.getElementById("sourceLangLabel");
-const targetLangLabel = document.getElementById("targetLangLabel");
 const sourceFieldLabel = document.getElementById("sourceFieldLabel");
 const targetFieldLabel = document.getElementById("targetFieldLabel");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const historyList = document.getElementById("historyList");
 const historyEmpty = document.getElementById("historyEmpty");
 const panel = document.querySelector(".panel");
+const sourceLangSelect = document.getElementById("sourceLangSelect");
+const targetLangSelect = document.getElementById("targetLangSelect");
 const chips = Array.from(document.querySelectorAll(".chip"));
 
 const languages = {
+  auto: "Auto",
   en: "English",
-  hi: "Hindi"
+  hi: "Hindi",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  it: "Italian",
+  pt: "Portuguese",
+  ru: "Russian",
+  zh: "Chinese",
+  ja: "Japanese",
+  ko: "Korean",
+  ar: "Arabic"
 };
 
 const statusClasses = [
@@ -35,14 +56,24 @@ const statusClasses = [
 ];
 
 const state = {
-  sourceLang: "en",
-  targetLang: "hi"
+  sourceLang: "auto",
+  targetLang: "hi",
+  inputHistory: [""],
+  inputIndex: 0
 };
 
 const setStatus = (message, type = "ready") => {
   statusText.classList.remove(...statusClasses);
   statusText.classList.add(`status-${type}`);
   statusText.textContent = message;
+};
+
+const setDetected = (code) => {
+  if (!code || !languages[code]) {
+    detectedLang.textContent = "Detected: -";
+    return;
+  }
+  detectedLang.textContent = `Detected: ${languages[code]} (${code})`;
 };
 
 const setBusy = (busy) => {
@@ -112,15 +143,28 @@ const addHistory = (item) => {
   renderHistory();
 };
 
+const populateLanguageSelects = () => {
+  const entries = Object.entries(languages);
+  const buildOptions = (select) => {
+    select.innerHTML = "";
+    entries.forEach(([code, label]) => {
+      const option = document.createElement("option");
+      option.value = code;
+      option.textContent = label;
+      select.appendChild(option);
+    });
+  };
+
+  buildOptions(sourceLangSelect);
+  buildOptions(targetLangSelect);
+  sourceLangSelect.value = state.sourceLang;
+  targetLangSelect.value = state.targetLang;
+};
+
 const updateLanguageUI = () => {
-  sourceLangLabel.textContent = languages[state.sourceLang];
-  targetLangLabel.textContent = languages[state.targetLang];
   sourceFieldLabel.textContent = `Input text (${languages[state.sourceLang]})`;
   targetFieldLabel.textContent = `${languages[state.targetLang]} translation`;
-  sourceText.placeholder =
-    state.sourceLang === "en"
-      ? "Type your English sentence here..."
-      : "Type your Hindi sentence here...";
+  sourceText.placeholder = "Type your text here...";
   translatedText.placeholder = "Translation appears here...";
   translatedText.style.fontFamily =
     state.targetLang === "hi"
@@ -131,6 +175,76 @@ const updateLanguageUI = () => {
 const resetOutput = () => {
   translatedText.value = "";
   setStatus("Ready", "ready");
+  setDetected(null);
+};
+
+const recordInput = (value) => {
+  const history = state.inputHistory.slice(0, state.inputIndex + 1);
+  if (history[history.length - 1] === value) {
+    return;
+  }
+  history.push(value);
+  if (history.length > INPUT_HISTORY_LIMIT) {
+    history.shift();
+  }
+  state.inputHistory = history;
+  state.inputIndex = history.length - 1;
+  updateUndoRedo();
+};
+
+const updateUndoRedo = () => {
+  undoBtn.disabled = state.inputIndex <= 0;
+  redoBtn.disabled = state.inputIndex >= state.inputHistory.length - 1;
+};
+
+const applyInputFromHistory = () => {
+  sourceText.value = state.inputHistory[state.inputIndex] || "";
+  updateCharCount();
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const translateWithRetry = async (payload) => {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(TRANSLATE_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let message = `Request failed (${response.status})`;
+        try {
+          const errBody = await response.json();
+          message = errBody.error || message;
+        } catch {
+          // Keep fallback message when backend does not return JSON.
+        }
+        throw new Error(message);
+      }
+
+      return response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (attempt === 0) {
+        setStatus("Retrying request...", "warning");
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error("Request failed");
 };
 
 const translate = async () => {
@@ -146,30 +260,12 @@ const translate = async () => {
   setStatus("Sending request...", "loading");
 
   try {
-    const response = await fetch(TRANSLATE_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        text,
-        source_lang: state.sourceLang,
-        target_lang: state.targetLang
-      })
+    const data = await translateWithRetry({
+      text,
+      source_lang: state.sourceLang,
+      target_lang: state.targetLang
     });
 
-    if (!response.ok) {
-      let message = `Request failed (${response.status})`;
-      try {
-        const errBody = await response.json();
-        message = errBody.error || message;
-      } catch {
-        // Keep fallback message when backend does not return JSON.
-      }
-      throw new Error(message);
-    }
-
-    const data = await response.json();
     const output = data.translation || data.translated_text || "";
 
     if (!output) {
@@ -178,10 +274,12 @@ const translate = async () => {
 
     translatedText.value = output;
     setStatus("Translated successfully", "success");
+    setDetected(data.detected_source_lang || null);
+
     addHistory({
       source_text: text,
       translated_text: output,
-      source_lang: state.sourceLang,
+      source_lang: data.detected_source_lang || state.sourceLang,
       target_lang: state.targetLang,
       created_at: new Date().toISOString()
     });
@@ -192,10 +290,34 @@ const translate = async () => {
   }
 };
 
+const initFromUrl = () => {
+  const params = new URLSearchParams(window.location.search);
+  const text = params.get("text");
+  const source = params.get("source");
+  const target = params.get("target");
+
+  if (source && languages[source]) {
+    state.sourceLang = source;
+  }
+  if (target && languages[target]) {
+    state.targetLang = target;
+  }
+
+  populateLanguageSelects();
+  updateLanguageUI();
+
+  if (text) {
+    sourceText.value = text;
+    updateCharCount();
+    recordInput(text);
+  }
+};
+
 translateBtn.addEventListener("click", translate);
 
 sourceText.addEventListener("input", () => {
   updateCharCount();
+  recordInput(sourceText.value);
   if (!sourceText.value.trim()) {
     resetOutput();
   }
@@ -211,8 +333,15 @@ clearBtn.addEventListener("click", () => {
   sourceText.value = "";
   translatedText.value = "";
   updateCharCount();
+  recordInput("");
   setStatus("Ready", "ready");
+  setDetected(null);
   sourceText.focus();
+});
+
+clearOutputBtn.addEventListener("click", () => {
+  translatedText.value = "";
+  setStatus("Output cleared", "ready");
 });
 
 copyBtn.addEventListener("click", async () => {
@@ -230,6 +359,78 @@ copyBtn.addEventListener("click", async () => {
   }
 });
 
+downloadBtn.addEventListener("click", () => {
+  const value = translatedText.value.trim();
+  if (!value) {
+    setStatus("Nothing to download yet.", "warning");
+    return;
+  }
+
+  const blob = new Blob([value], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "translation.txt";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setStatus("Downloaded translation", "success");
+});
+
+copyLinkBtn.addEventListener("click", async () => {
+  const text = sourceText.value.trim();
+  if (!text) {
+    setStatus("Add text before sharing.", "warning");
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("text", text);
+  url.searchParams.set("source", state.sourceLang);
+  url.searchParams.set("target", state.targetLang);
+
+  try {
+    await navigator.clipboard.writeText(url.toString());
+    setStatus("Copied share link", "success");
+  } catch {
+    setStatus("Clipboard blocked by browser", "error");
+  }
+});
+
+qrBtn.addEventListener("click", () => {
+  const text = sourceText.value.trim();
+  if (!text) {
+    setStatus("Add text before sharing.", "warning");
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("text", text);
+  url.searchParams.set("source", state.sourceLang);
+  url.searchParams.set("target", state.targetLang);
+
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url.toString())}`;
+  window.open(qrUrl, "_blank", "noopener,noreferrer");
+  setStatus("Opened QR code", "success");
+});
+
+undoBtn.addEventListener("click", () => {
+  if (state.inputIndex > 0) {
+    state.inputIndex -= 1;
+    applyInputFromHistory();
+    updateUndoRedo();
+  }
+});
+
+redoBtn.addEventListener("click", () => {
+  if (state.inputIndex < state.inputHistory.length - 1) {
+    state.inputIndex += 1;
+    applyInputFromHistory();
+    updateUndoRedo();
+  }
+});
+
 swapBtn.addEventListener("click", () => {
   const nextSource = state.targetLang;
   state.targetLang = state.sourceLang;
@@ -237,15 +438,33 @@ swapBtn.addEventListener("click", () => {
   const previousInput = sourceText.value;
   sourceText.value = translatedText.value;
   translatedText.value = previousInput;
+  sourceLangSelect.value = state.sourceLang;
+  targetLangSelect.value = state.targetLang;
   updateLanguageUI();
   updateCharCount();
-  setStatus("Languages swapped. Backend may support only en -> hi.", "warning");
+  setStatus("Languages swapped", "ready");
+  panel.classList.remove("swap-animate");
+  requestAnimationFrame(() => {
+    panel.classList.add("swap-animate");
+    setTimeout(() => panel.classList.remove("swap-animate"), 320);
+  });
+});
+
+sourceLangSelect.addEventListener("change", (event) => {
+  state.sourceLang = event.target.value;
+  updateLanguageUI();
+});
+
+targetLangSelect.addEventListener("change", (event) => {
+  state.targetLang = event.target.value;
+  updateLanguageUI();
 });
 
 chips.forEach((chip) => {
   chip.addEventListener("click", () => {
     sourceText.value = chip.dataset.sample || "";
     updateCharCount();
+    recordInput(sourceText.value);
     resetOutput();
     sourceText.focus();
   });
@@ -268,6 +487,8 @@ historyList.addEventListener("click", async (event) => {
   if (action === "reuse") {
     state.sourceLang = item.source_lang;
     state.targetLang = item.target_lang;
+    sourceLangSelect.value = state.sourceLang;
+    targetLangSelect.value = state.targetLang;
     sourceText.value = item.source_text;
     translatedText.value = item.translated_text;
     updateLanguageUI();
@@ -292,5 +513,8 @@ clearHistoryBtn.addEventListener("click", () => {
 });
 
 updateCharCount();
+populateLanguageSelects();
 updateLanguageUI();
 renderHistory();
+updateUndoRedo();
+initFromUrl();

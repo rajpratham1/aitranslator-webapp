@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Translator | English to Hindi</title>
-  <meta name="description" content="English to Hindi translator UI powered by a Flask backend and Helsinki-NLP model." />
+  <title>AI Translator | Multi-language</title>
+  <meta name="description" content="Multi-language translator UI powered by a Flask backend and AI models." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -16,18 +16,24 @@
   <main class="app">
     <header class="hero">
       <p class="kicker">AI TRANSLATION</p>
-      <h1>English to Hindi Translator</h1>
+      <h1>Multi-language Translator</h1>
       <p class="subtitle">
-        Fast neural translation UI for the <code>Helsinki-NLP/opus-mt-en-hi</code> model.
+        Translate across popular languages with a clean AI-assisted workflow.
       </p>
     </header>
 
     <section class="panel" aria-label="translator">
       <div class="panel-header">
         <div class="lang-pair">
-          <span id="sourceLangLabel">English</span>
+          <label class="lang-select">
+            <span class="sr-only">Source language</span>
+            <select id="sourceLangSelect" aria-label="Source language"></select>
+          </label>
           <button id="swapBtn" type="button" class="swap-btn" aria-label="Swap languages">Swap</button>
-          <span id="targetLangLabel">Hindi</span>
+          <label class="lang-select">
+            <span class="sr-only">Target language</span>
+            <select id="targetLangSelect" aria-label="Target language"></select>
+          </label>
         </div>
         <button id="clearBtn" type="button" class="ghost-btn">Clear</button>
       </div>
@@ -42,13 +48,22 @@
         <label class="field">
           <span id="targetFieldLabel" class="field-label">Hindi translation</span>
           <textarea id="translatedText" readonly placeholder="Translation appears here..."></textarea>
-          <span id="statusText" class="hint status status-ready" role="status" aria-live="polite">Ready</span>
+          <div class="status-row">
+            <span id="statusText" class="hint status status-ready" role="status" aria-live="polite">Ready</span>
+            <span id="detectedLang" class="hint detected">Detected: -</span>
+          </div>
         </label>
       </div>
 
       <div class="actions">
         <button id="translateBtn" type="button" class="primary-btn">Translate</button>
         <button id="copyBtn" type="button" class="ghost-btn">Copy Output</button>
+        <button id="downloadBtn" type="button" class="ghost-btn">Download TXT</button>
+        <button id="copyLinkBtn" type="button" class="ghost-btn">Copy Link</button>
+        <button id="qrBtn" type="button" class="ghost-btn">QR</button>
+        <button id="undoBtn" type="button" class="ghost-btn">Undo</button>
+        <button id="redoBtn" type="button" class="ghost-btn">Redo</button>
+        <button id="clearOutputBtn" type="button" class="ghost-btn">Clear Output</button>
       </div>
 
       <div class="chips" aria-label="examples">

@@ -14,6 +14,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -70,6 +74,12 @@ h1 {
   box-shadow: var(--shadow);
   padding: 20px;
   animation: rise 420ms ease-out;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 50px rgba(24, 39, 75, 0.18);
 }
 
 .panel-header {
@@ -77,6 +87,8 @@ h1 {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 14px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .lang-pair {
@@ -88,6 +100,26 @@ h1 {
   border-radius: 999px;
   padding: 8px 14px;
   font-weight: 700;
+  flex-wrap: wrap;
+}
+
+.lang-select select {
+  border: 1px solid #bae6e1;
+  background: #ffffff;
+  color: #0f4f4a;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 140ms ease;
+}
+
+.lang-select select:focus {
+  outline: none;
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
 }
 
 .swap-btn {
@@ -98,10 +130,23 @@ h1 {
   padding: 4px 10px;
   font-size: 0.78rem;
   font-weight: 700;
+  transition: transform 140ms ease, box-shadow 180ms ease;
 }
 
 .swap-btn:hover {
   background: #f0fdfa;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.15);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 
 .grid {
@@ -129,13 +174,17 @@ textarea {
   border-radius: 12px;
   padding: 14px;
   font: 500 1rem/1.6 "Space Grotesk", "Segoe UI", sans-serif;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   color: var(--text);
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 #translatedText {
   font-family: "Noto Sans Devanagari", "Mangal", sans-serif;
+}
+
+textarea::placeholder {
+  color: rgba(95, 108, 121, 0.65);
 }
 
 textarea:focus {
@@ -147,6 +196,21 @@ textarea:focus {
 .hint {
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.detected {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.78rem;
 }
 
 .status {
@@ -216,6 +280,7 @@ button:active {
 
 .primary-btn:hover {
   background: linear-gradient(135deg, var(--primary-strong), #0891b2);
+  transform: translateY(-1px);
 }
 
 .primary-btn:disabled {
@@ -228,10 +293,12 @@ button:active {
   color: #24313d;
   border: 1px solid var(--line);
   padding: 10px 14px;
+  transition: transform 140ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .ghost-btn:hover {
   border-color: #b8c3ce;
+  box-shadow: 0 8px 18px rgba(36, 49, 61, 0.08);
 }
 
 .chips {
@@ -248,10 +315,13 @@ button:active {
   border: 1px solid #fed7aa;
   padding: 8px 10px;
   border-radius: 999px;
+  transition: transform 140ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
 .chip:hover {
   background: #ffedd5;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 14px rgba(117, 50, 15, 0.12);
 }
 
 .panel.loading #translatedText {
@@ -300,6 +370,13 @@ button:active {
   padding: 10px;
   display: grid;
   gap: 8px;
+  transition: transform 160ms ease, box-shadow 180ms ease, border-color 160ms ease;
+}
+
+.history-item:hover {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 18px rgba(30, 41, 59, 0.12);
 }
 
 .history-meta {
@@ -363,6 +440,57 @@ button:active {
   }
 }
 
+@media (max-width: 600px) {
+  .app {
+    width: min(520px, 94%);
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .lang-pair {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lang-select select {
+    min-width: 120px;
+  }
+
+  .swap-btn {
+    order: 2;
+  }
+
+  .ghost-btn {
+    width: 100%;
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions .ghost-btn,
+  .actions .primary-btn {
+    width: 100%;
+  }
+
+  .chips {
+    flex-direction: column;
+  }
+
+  .chip {
+    width: 100%;
+    text-align: center;
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -394,5 +522,28 @@ button:active {
 
   to {
     background-position: -200% 0;
+  }
+}
+
+@keyframes swap-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.panel.swap-animate {
+  animation: swap-pop 280ms ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
   }
 }
